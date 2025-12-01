@@ -1,0 +1,1024 @@
+{
+  "name": "Bitcoin Multi-Agent Investment Decision System (Enhanced)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bitcoin-analysis",
+        "responseMode": "responseNode",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "1. Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "bitcoin-analysis-trigger",
+      "notes": "Trigger workflow via POST request to /webhook/bitcoin-analysis"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "1b. Schedule (Every 6h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 500],
+      "notes": "Automatically run analysis every 6 hours"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/fetch-price",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "BTC/USD"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-price",
+      "name": "2. Fetch Bitcoin Price",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [500, 400],
+      "notes": "Fetch current BTC price and 100-day historical data"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/calculate-indicators",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ price_data: $json }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "calculate-indicators",
+      "name": "3. Calculate Indicators",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [700, 400],
+      "notes": "Calculate RSI, MACD, Bollinger Bands, SMA, EMA"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/linear-regression-predict",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ current_price: $json.current_price, features: $json.features }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "linear-regression",
+      "name": "4a. Linear Regression (82%)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [950, 200],
+      "notes": "Elastic Net regularization model - highest accuracy"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/arima-predict",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ price_series: $('3. Calculate Indicators').item.json.price_series, steps: 7 }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "arima-model",
+      "name": "4b. ARIMA(2,1,2) (54%)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [950, 400],
+      "notes": "Time series forecasting model"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/seasonal-predict",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: $('3. Calculate Indicators').item.json.price_series, steps: 7 }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "seasonal-model",
+      "name": "4c. Seasonal (53%)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [950, 600],
+      "notes": "Prophet-like seasonal decomposition model"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-predictions",
+      "name": "5. Merge Predictions",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [1200, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ensemble Prediction Calculation\nconst items = $input.all();\nconst linearPred = items[0]?.json || {};\nconst arimaPred = items[1]?.json || {};\nconst seasonalPred = items[2]?.json || {};\n\n// Model weights based on historical accuracy\nconst weights = {\n  linear_regression: 0.50,  // 82.12% accuracy\n  arima: 0.30,              // 54.20% accuracy\n  seasonal: 0.20            // 53.47% accuracy\n};\n\nconst currentPrice = linearPred.current_price || 67500;\n\n// Calculate weighted ensemble prediction\nconst ensemblePrice = \n  (linearPred.predicted_price || currentPrice) * weights.linear_regression +\n  (arimaPred.predicted_price || currentPrice) * weights.arima +\n  (seasonalPred.predicted_price || currentPrice) * weights.seasonal;\n\nconst changePercent = ((ensemblePrice - currentPrice) / currentPrice) * 100;\n\n// Determine trend\nlet trend;\nif (changePercent > 5) trend = 'strong_upward';\nelse if (changePercent > 2) trend = 'upward';\nelse if (changePercent > -2) trend = 'sideways';\nelse if (changePercent > -5) trend = 'downward';\nelse trend = 'strong_downward';\n\n// Model consensus\nconst directions = [\n  linearPred.direction || 'neutral',\n  arimaPred.direction || 'neutral',\n  seasonalPred.direction || 'neutral'\n];\nconst bullishCount = directions.filter(d => d === 'bullish').length;\n\n// Calculate combined confidence\nconst avgConfidence = (\n  (linearPred.confidence || 0.5) * weights.linear_regression +\n  (arimaPred.confidence || 0.5) * weights.arima +\n  (seasonalPred.confidence || 0.5) * weights.seasonal\n);\n\nreturn {\n  json: {\n    ensemble_prediction: {\n      predicted_price: ensemblePrice,\n      change_percent: changePercent,\n      trend: trend,\n      model_consensus: `${bullishCount}/3 bullish`,\n      confidence: avgConfidence\n    },\n    individual_models: {\n      linear_regression: linearPred,\n      arima: arimaPred,\n      seasonal: seasonalPred\n    },\n    current_price: currentPrice,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "ensemble-calc",
+      "name": "6. Ensemble Calculation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 400],
+      "notes": "Weighted average: 50% LR + 30% ARIMA + 20% Seasonal"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/multi-timeframe-analysis",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ prediction: $json.ensemble_prediction }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "multi-timeframe",
+      "name": "7. Multi-Timeframe Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1600, 300],
+      "notes": "Short (1-7d), Medium (1-4w), Long (1-3m) term analysis"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/scenario-analysis",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ current_price: $('6. Ensemble Calculation').item.json.current_price, prediction: $('6. Ensemble Calculation').item.json.ensemble_prediction }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "scenario-analysis",
+      "name": "8. Scenario Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1600, 500],
+      "notes": "Bull/Bear/Sideways/Black Swan scenarios with probabilities"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for parallel analyst execution\nconst input = $input.first().json;\nconst ensembleData = $('6. Ensemble Calculation').first().json;\nconst mtfData = $('7. Multi-Timeframe Analysis').first().json;\nconst scenarioData = $('8. Scenario Analysis').first().json;\n\nreturn {\n  json: {\n    prediction: ensembleData.ensemble_prediction,\n    current_price: ensembleData.current_price,\n    multi_timeframe: mtfData,\n    scenarios: scenarioData,\n    technical_indicators: $('3. Calculate Indicators').first().json.technical_indicators\n  }\n};"
+      },
+      "id": "prepare-analyst-data",
+      "name": "9. Prepare Analyst Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1850, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/analyst/technical",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "technical-analyst",
+      "name": "10a. Technical Analyst",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2100, 100],
+      "notes": "Analyzes chart patterns, RSI, MACD, Moving Averages"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/analyst/industry",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "industry-analyst",
+      "name": "10b. Industry Analyst",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2100, 250],
+      "notes": "Evaluates regulatory news, adoption curves, industry trends"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/analyst/financial",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "financial-analyst",
+      "name": "10c. Financial Analyst",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2100, 400],
+      "notes": "Analyzes risk/reward ratios, macro correlations"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/analyst/market",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "market-expert",
+      "name": "10d. Market Expert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2100, 550],
+      "notes": "Monitors sentiment (Fear & Greed), volume analysis"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/analyst/risk",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "risk-analyst",
+      "name": "10e. Risk Analyst",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2100, 700],
+      "notes": "Identifies tail risks, exposure limits, risk warnings"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-analysts",
+      "name": "11. Merge Analyst Opinions",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [2350, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/anonymize-analyses",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ analyses: $input.all().map(item => item.json) }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "anonymize",
+      "name": "12. Anonymize Analyses",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2550, 400],
+      "notes": "Strip role identifiers, assign random labels (A, B, C, D, E)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/peer-review",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ anonymous_analyses: $json.anonymous_analyses, dimensions: ['accuracy', 'insight', 'logic', 'risk_awareness', 'actionability'] }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "peer-review",
+      "name": "13. Peer Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2750, 400],
+      "notes": "Each analyst reviews others on 5 dimensions"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/calculate-rankings",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ peer_reviews: $json.peer_reviews, anonymous_analyses: $('12. Anonymize Analyses').item.json.anonymous_analyses }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "rankings",
+      "name": "14. Calculate Rankings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2950, 400],
+      "notes": "Rank analysts by peer review scores"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/devils-advocate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ consensus_view: $json.consensus, all_analyses: $('12. Anonymize Analyses').item.json.anonymous_analyses }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "devils-advocate",
+      "name": "15. Devil's Advocate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [3150, 300],
+      "notes": "Challenge consensus, identify overlooked risks"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/red-blue-team",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ decision: { action: $('14. Calculate Rankings').item.json.consensus.includes('BUY') ? 'buy' : 'hold', confidence: 7 }, context: { prediction: $('6. Ensemble Calculation').item.json.ensemble_prediction } }) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "red-blue-team",
+      "name": "16. Red-Blue Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [3150, 500],
+      "notes": "Red Team attacks, Blue Team defends, Judge scores"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge validation results\nconst rankings = $('14. Calculate Rankings').first().json;\nconst devilsAdvocate = $('15. Devil\\'s Advocate').first().json;\nconst redBlueTeam = $('16. Red-Blue Team').first().json;\nconst ensemble = $('6. Ensemble Calculation').first().json;\n\nreturn {\n  json: {\n    rankings: rankings,\n    devils_advocate: devilsAdvocate,\n    red_blue_team: redBlueTeam,\n    ensemble: ensemble\n  }\n};"
+      },
+      "id": "merge-validation",
+      "name": "17. Merge Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3350, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/bayesian-fusion",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ signals: { model_prediction: { direction: $json.ensemble.ensemble_prediction.trend.includes('up') ? 'up' : 'down', strength: Math.abs($json.ensemble.ensemble_prediction.change_percent) / 10, confidence: $json.ensemble.ensemble_prediction.confidence } } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "bayesian-fusion",
+      "name": "18. Bayesian Fusion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [3550, 400],
+      "notes": "Probabilistic signal combination"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/confidence-calibration",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ raw_confidence: $json.fusion_result?.confidence || 0.7 }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "confidence-calibration",
+      "name": "19. Confidence Calibration",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [3750, 400],
+      "notes": "Adjust for overconfidence/underconfidence"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/chairman-synthesis",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ rankings: $('17. Merge Validation').item.json.rankings.rankings || [], devils_advocate: $('17. Merge Validation').item.json.devils_advocate.devils_advocate || {}, red_blue_verdict: $('17. Merge Validation').item.json.red_blue_team.verdict || {}, bayesian_result: $('18. Bayesian Fusion').item.json.fusion_result || {}, calibrated_confidence: $json.calibration?.calibrated_confidence || 0.65 }) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "chairman-synthesis",
+      "name": "20. Chairman Synthesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [3950, 400],
+      "notes": "Final decision synthesis by Investment Manager"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/risk-budget-calculation",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ total_capital: 100000, max_risk_percent: 5, entry_price: $('6. Ensemble Calculation').item.json.current_price, stop_loss_percent: 8, confidence: $('19. Confidence Calibration').item.json.calibration?.calibrated_confidence || 0.65 }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "risk-budget",
+      "name": "21. Risk Budget",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [4150, 400],
+      "notes": "Calculate position size based on risk budget"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compile Final Decision\nconst ensemble = $('6. Ensemble Calculation').first().json;\nconst chairman = $('20. Chairman Synthesis').first().json;\nconst riskBudget = $('21. Risk Budget').first().json;\nconst calibration = $('19. Confidence Calibration').first().json;\nconst rankings = $('17. Merge Validation').first().json.rankings;\nconst devilsAdvocate = $('17. Merge Validation').first().json.devils_advocate;\nconst redBlueTeam = $('17. Merge Validation').first().json.red_blue_team;\nconst scenarios = $('8. Scenario Analysis').first().json;\nconst multiTimeframe = $('7. Multi-Timeframe Analysis').first().json;\n\nconst currentPrice = ensemble.current_price;\nconst action = chairman.chairman_decision?.action || 'hold';\nconst positionPercent = chairman.chairman_decision?.position_percent || 0;\nconst confidence = calibration.calibration?.calibrated_confidence || 0.65;\n\nconst finalDecision = {\n  decision_id: `DEC_${Date.now()}`,\n  timestamp: new Date().toISOString(),\n  \n  // Price Information\n  price_info: {\n    current_price: currentPrice,\n    predicted_price: ensemble.ensemble_prediction?.predicted_price,\n    change_percent: ensemble.ensemble_prediction?.change_percent,\n    trend: ensemble.ensemble_prediction?.trend\n  },\n  \n  // Final Recommendation\n  recommendation: {\n    action: action,\n    confidence: confidence,\n    position_percent: positionPercent,\n    entry_price: currentPrice,\n    stop_loss: currentPrice * 0.92,\n    take_profit: currentPrice * 1.12\n  },\n  \n  // Position Sizing\n  position: {\n    recommended_units: riskBudget.risk_budget?.recommended_units,\n    investment_amount: riskBudget.risk_budget?.total_investment,\n    max_loss: riskBudget.risk_budget?.max_loss\n  },\n  \n  // Analysis Summary\n  analysis_summary: {\n    multi_timeframe: multiTimeframe.analysis?.synthesis?.final_signal,\n    scenario_expected: scenarios.scenarios?.expected_value?.expected_change,\n    model_consensus: ensemble.ensemble_prediction?.model_consensus,\n    top_analyst: rankings.rankings?.[0]?.anonymous_id,\n    top_analyst_score: rankings.rankings?.[0]?.average_score\n  },\n  \n  // Risk Assessment\n  risk_assessment: {\n    devils_advocate_confidence: devilsAdvocate.devils_advocate?.confidence_in_challenge,\n    red_blue_verdict: redBlueTeam.verdict?.verdict,\n    red_blue_score: redBlueTeam.verdict?.final_score,\n    downside_probability: scenarios.scenarios?.risk_assessment?.downside_probability\n  },\n  \n  // Model Performance\n  model_performance: {\n    linear_regression: { accuracy: 0.8212, weight: 0.50, prediction: ensemble.individual_models?.linear_regression?.predicted_price },\n    arima: { accuracy: 0.542, weight: 0.30, prediction: ensemble.individual_models?.arima?.predicted_price },\n    seasonal: { accuracy: 0.535, weight: 0.20, prediction: ensemble.individual_models?.seasonal?.predicted_price }\n  }\n};\n\nreturn { json: finalDecision };"
+      },
+      "id": "compile-decision",
+      "name": "22. Compile Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4350, 400],
+      "notes": "Compile all analysis into final structured decision"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5000/api/save-decision",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ decision: $json }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "save-decision",
+      "name": "23. Save Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [4550, 400],
+      "notes": "Save to investment_history for future learning"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.recommendation.action }}",
+              "operation": "contains",
+              "value2": "buy"
+            }
+          ]
+        }
+      },
+      "id": "check-action",
+      "name": "24. Check Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [4750, 400],
+      "notes": "Route based on buy/sell/hold decision"
+    },
+    {
+      "parameters": {
+        "channel": "#bitcoin-alerts",
+        "text": "=🚀 *BUY SIGNAL* 🚀\n\n*Bitcoin Investment Decision*\n━━━━━━━━━━━━━━━━━━━━━━━━\n📊 Current Price: ${{ $json.price_info.current_price.toLocaleString() }}\n📈 Predicted: ${{ $json.price_info.predicted_price.toLocaleString() }} ({{ $json.price_info.change_percent.toFixed(2) }}%)\n\n*Recommendation:*\n• Action: {{ $json.recommendation.action.toUpperCase() }}\n• Position: {{ $json.recommendation.position_percent }}%\n• Investment: ${{ $json.position.investment_amount?.toLocaleString() || 'N/A' }}\n• Stop Loss: ${{ $json.recommendation.stop_loss.toLocaleString() }}\n• Take Profit: ${{ $json.recommendation.take_profit.toLocaleString() }}\n• Confidence: {{ ($json.recommendation.confidence * 100).toFixed(1) }}%\n\n*Risk Assessment:*\n• Devil's Advocate: {{ $json.risk_assessment.devils_advocate_confidence }}/10\n• Red-Blue Verdict: {{ $json.risk_assessment.red_blue_verdict }}\n• Downside Prob: {{ ($json.risk_assessment.downside_probability * 100).toFixed(0) }}%\n\n*Model Consensus:* {{ $json.analysis_summary.model_consensus }}\n*Top Analyst:* {{ $json.analysis_summary.top_analyst }} ({{ $json.analysis_summary.top_analyst_score?.toFixed(1) }}/10)\n\n⏰ {{ $json.timestamp }}",
+        "otherOptions": {}
+      },
+      "id": "slack-buy",
+      "name": "25a. Slack Buy Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [4950, 300],
+      "notes": "Send buy alert to Slack"
+    },
+    {
+      "parameters": {
+        "channel": "#bitcoin-alerts",
+        "text": "=⚠️ *{{ $json.recommendation.action.toUpperCase() }} SIGNAL* ⚠️\n\n*Bitcoin Investment Decision*\n━━━━━━━━━━━━━━━━━━━━━━━━\n📊 Current Price: ${{ $json.price_info.current_price.toLocaleString() }}\n📉 Predicted: ${{ $json.price_info.predicted_price.toLocaleString() }} ({{ $json.price_info.change_percent.toFixed(2) }}%)\n\n*Recommendation:*\n• Action: {{ $json.recommendation.action.toUpperCase() }}\n• Confidence: {{ ($json.recommendation.confidence * 100).toFixed(1) }}%\n\n*Risk Assessment:*\n• Devil's Advocate: {{ $json.risk_assessment.devils_advocate_confidence }}/10\n• Red-Blue Verdict: {{ $json.risk_assessment.red_blue_verdict }}\n\n⏰ {{ $json.timestamp }}",
+        "otherOptions": {}
+      },
+      "id": "slack-other",
+      "name": "25b. Slack Hold/Sell Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [4950, 500],
+      "notes": "Send hold/sell alert to Slack"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $('22. Compile Decision').item.json }}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "26. Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [5150, 400],
+      "notes": "Return final decision as webhook response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handler - log and notify\nconst error = $input.first();\n\nconsole.error('Workflow Error:', error);\n\nreturn {\n  json: {\n    error: true,\n    message: error.message || 'Unknown error occurred',\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3000, 700],
+      "notes": "Handle workflow errors gracefully"
+    }
+  ],
+  "connections": {
+    "1. Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "2. Fetch Bitcoin Price",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1b. Schedule (Every 6h)": {
+      "main": [
+        [
+          {
+            "node": "2. Fetch Bitcoin Price",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Fetch Bitcoin Price": {
+      "main": [
+        [
+          {
+            "node": "3. Calculate Indicators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Calculate Indicators": {
+      "main": [
+        [
+          {
+            "node": "4a. Linear Regression (82%)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "4b. ARIMA(2,1,2) (54%)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "4c. Seasonal (53%)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4a. Linear Regression (82%)": {
+      "main": [
+        [
+          {
+            "node": "5. Merge Predictions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b. ARIMA(2,1,2) (54%)": {
+      "main": [
+        [
+          {
+            "node": "5. Merge Predictions",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "4c. Seasonal (53%)": {
+      "main": [
+        [
+          {
+            "node": "5. Merge Predictions",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "5. Merge Predictions": {
+      "main": [
+        [
+          {
+            "node": "6. Ensemble Calculation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Ensemble Calculation": {
+      "main": [
+        [
+          {
+            "node": "7. Multi-Timeframe Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "8. Scenario Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Multi-Timeframe Analysis": {
+      "main": [
+        [
+          {
+            "node": "9. Prepare Analyst Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. Scenario Analysis": {
+      "main": [
+        [
+          {
+            "node": "9. Prepare Analyst Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Prepare Analyst Data": {
+      "main": [
+        [
+          {
+            "node": "10a. Technical Analyst",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "10b. Industry Analyst",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "10c. Financial Analyst",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "10d. Market Expert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "10e. Risk Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10a. Technical Analyst": {
+      "main": [
+        [
+          {
+            "node": "11. Merge Analyst Opinions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10b. Industry Analyst": {
+      "main": [
+        [
+          {
+            "node": "11. Merge Analyst Opinions",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "10c. Financial Analyst": {
+      "main": [
+        [
+          {
+            "node": "11. Merge Analyst Opinions",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "10d. Market Expert": {
+      "main": [
+        [
+          {
+            "node": "11. Merge Analyst Opinions",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "10e. Risk Analyst": {
+      "main": [
+        [
+          {
+            "node": "11. Merge Analyst Opinions",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "11. Merge Analyst Opinions": {
+      "main": [
+        [
+          {
+            "node": "12. Anonymize Analyses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12. Anonymize Analyses": {
+      "main": [
+        [
+          {
+            "node": "13. Peer Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13. Peer Review": {
+      "main": [
+        [
+          {
+            "node": "14. Calculate Rankings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14. Calculate Rankings": {
+      "main": [
+        [
+          {
+            "node": "15. Devil's Advocate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "16. Red-Blue Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15. Devil's Advocate": {
+      "main": [
+        [
+          {
+            "node": "17. Merge Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16. Red-Blue Team": {
+      "main": [
+        [
+          {
+            "node": "17. Merge Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "17. Merge Validation": {
+      "main": [
+        [
+          {
+            "node": "18. Bayesian Fusion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "18. Bayesian Fusion": {
+      "main": [
+        [
+          {
+            "node": "19. Confidence Calibration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "19. Confidence Calibration": {
+      "main": [
+        [
+          {
+            "node": "20. Chairman Synthesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "20. Chairman Synthesis": {
+      "main": [
+        [
+          {
+            "node": "21. Risk Budget",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "21. Risk Budget": {
+      "main": [
+        [
+          {
+            "node": "22. Compile Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "22. Compile Decision": {
+      "main": [
+        [
+          {
+            "node": "23. Save Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "23. Save Decision": {
+      "main": [
+        [
+          {
+            "node": "24. Check Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24. Check Action": {
+      "main": [
+        [
+          {
+            "node": "25a. Slack Buy Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "25b. Slack Hold/Sell Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "25a. Slack Buy Alert": {
+      "main": [
+        [
+          {
+            "node": "26. Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "25b. Slack Hold/Sell Alert": {
+      "main": [
+        [
+          {
+            "node": "26. Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "id": "1",
+      "name": "bitcoin"
+    },
+    {
+      "id": "2",
+      "name": "investment"
+    },
+    {
+      "id": "3",
+      "name": "multi-agent"
+    },
+    {
+      "id": "4",
+      "name": "ai-workflow"
+    },
+    {
+      "id": "5",
+      "name": "trading"
+    }
+  ],
+  "meta": {
+    "instanceId": "bitcoin-investment-system-enhanced",
+    "version": "2.0"
+  },
+  "pinData": {}
+}
+

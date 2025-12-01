@@ -1,0 +1,42 @@
+{
+  "timestamp": "2025-12-02T01:17:45.711423",
+  "price_info": {
+    "current_price": 67500,
+    "predicted_price": 69849.9264548542,
+    "change_percent": 3.48137252570994
+  },
+  "recommendation": {
+    "action": "BUY",
+    "confidence": 7,
+    "position_percent": 51.125
+  },
+  "analyst_votes": {
+    "technical_analyst": "buy",
+    "industry_analyst": "buy",
+    "financial_analyst": "hold",
+    "market_expert": "buy",
+    "risk_analyst": "hold"
+  },
+  "peer_review_rankings": [
+    {
+      "id": "Analyst B",
+      "score": 6.825
+    },
+    {
+      "id": "Analyst A",
+      "score": 6.375
+    },
+    {
+      "id": "Analyst D",
+      "score": 6.0875
+    },
+    {
+      "id": "Analyst C",
+      "score": 6.0375000000000005
+    },
+    {
+      "id": "Analyst E",
+      "score": 5.9
+    }
+  ]
+}

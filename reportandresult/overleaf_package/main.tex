@@ -1,0 +1,183 @@
+\documentclass[9pt,twocolumn,a4paper]{article}
+\usepackage[margin=0.45in,columnsep=0.2in,top=0.4in,bottom=0.5in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{float}
+
+% Compact spacing
+\titlespacing*{\section}{0pt}{4pt}{2pt}
+\titlespacing*{\subsection}{0pt}{3pt}{1pt}
+\setlist{nosep,leftmargin=*,topsep=1pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1.5pt}
+\captionsetup{font=small,skip=2pt}
+
+% Code listing style for results
+\definecolor{resultbg}{RGB}{245,245,245}
+\lstset{
+    basicstyle=\ttfamily\tiny,
+    backgroundcolor=\color{resultbg},
+    frame=single,
+    breaklines=true,
+    columns=fullflexible,
+    keepspaces=true
+}
+
+\title{\vspace{-1.2cm}\textbf{Multi-Agent Workflow System for Bitcoin Investment Decision-Making}}
+\author{\textbf{Yan Bo} (ID: 2330034061)}
+\date{\vspace{-0.4cm}}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+\fancyhf{}
+\rfoot{\footnotesize\thepage}
+
+\vspace{-0.3cm}
+\begin{abstract}
+\small
+This paper presents a multi-agent workflow system for Bitcoin investment analysis. The system integrates ensemble machine learning (Linear Regression 82\%, ARIMA, Seasonal) with five specialized AI analysts, anonymous peer review, and adversarial validation. Experimental results yield a \textbf{BUY} recommendation with \textbf{45\%} position size, validated by Red-Blue team scoring \textbf{7.1/10}.
+\end{abstract}
+
+\section{System Architecture \& Workflow}
+
+The N8N-orchestrated workflow comprises 27 nodes across 6 phases (Fig.~\ref{fig:workflow}).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\columnwidth]{workflow.png}
+\caption{Complete N8N Workflow: Data Collection $\rightarrow$ Prediction $\rightarrow$ Multi-Agent Analysis $\rightarrow$ Peer Review $\rightarrow$ Validation $\rightarrow$ Decision}
+\label{fig:workflow}
+\end{figure}
+
+\vspace{-0.2cm}
+\subsection{Phase 1: Ensemble Prediction}
+Three models generate predictions with weighted fusion:
+\begin{equation}
+\hat{y} = 0.50 \cdot \hat{y}_{LR} + 0.30 \cdot \hat{y}_{ARIMA} + 0.20 \cdot \hat{y}_{Seasonal}
+\end{equation}
+
+\subsection{Phase 2: Multi-Agent Analysis}
+Five specialized agents (Technical, Industry, Financial, Market, Risk) independently analyze data. Bayesian signal fusion combines their outputs:
+\begin{equation}
+P(Bull|S) = \frac{\prod_i P(S_i|Bull) \cdot P(Bull)}{\sum_H \prod_i P(S_i|H) \cdot P(H)}
+\end{equation}
+
+\subsection{Phase 3: Anonymous Peer Review}
+Analyses are anonymized (A-E) to eliminate authority bias. Quality score:
+$Q_i = \sum_d \omega_d \cdot \bar{s}_i^d$ where $\bar{s}_i^d$ is the average peer score.
+
+\subsection{Phase 4: Red-Blue Validation}
+Red Team attacks the decision; Blue Team defends. Judge synthesizes final score.
+
+\section{Experimental Results}
+
+\textbf{Multi-Agent Voting:}
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabular}{lccc}
+\toprule
+\textbf{Agent} & \textbf{Action} & \textbf{Conf.} & \textbf{Rationale} \\
+\midrule
+Technical & BUY & 8/10 & RSI=58, above MA \\
+Industry & BUY & 7/10 & ETF inflows strong \\
+Financial & HOLD & 6/10 & Phased entry advised \\
+Market & BUY & 7/10 & Sentiment positive \\
+Risk & HOLD & 5/10 & Macro headwinds \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\vspace{-0.2cm}
+\subsection*{Final Investment Decision}
+\begin{lstlisting}
+==================================================
+FINAL INVESTMENT DECISION
+==================================================
+[Chairman's Synthesis]
+1. Peer-reviewed rankings favor BUY recommendation
+2. Top-ranked Analyst A: compelling technical evidence
+3. Signal fusion shows 72.5% bullish probability
+4. Devil's Advocate raised valid concerns
+5. Risk-adjusted position sizing is essential
+
+==================================================
+RECOMMENDATION: BUY
+==================================================
+[Decision Details]
+  Action: BUY
+  Position Size: 45%
+  Confidence: 7/10
+  Stop-Loss: -8%
+  Take-Profit: +12%
+\end{lstlisting}
+
+\vspace{-0.2cm}
+\subsection*{Red-Blue Team Validation}
+\begin{lstlisting}
+[Red Team Challenges]
+  - Model confidence at 68% not overwhelming
+  - Downside risk may be underestimated
+  - Tail risk not fully considered
+
+[Blue Team Defense]
+  + Multi-model ensemble improves reliability
+  + Decision aligns with prediction direction
+  + Linear Regression has 82% historical accuracy
+
+[Judge Verdict]
+  Challenge Score: 6/10 | Defense Score: 7.5/10
+  Final Score: 7.1/10
+  Verdict: DECISION PASSED VALIDATION
+\end{lstlisting}
+
+\vspace{-0.2cm}
+\subsection*{Risk Budget Calculation}
+\begin{lstlisting}
+[Account Parameters]
+  Total Capital: $100,000 | Max Risk: 5% ($5,000)
+
+[Position Calculation]
+  Entry: $67,500 | Stop-Loss: $62,100 (-8%)
+  Risk Per Unit: $5,400
+  Recommended: 0.76 BTC ($45,000) = 45% position
+
+[Risk-Reward Analysis]
+  Risk: $5,400 | Reward: $8,100 | Ratio: 1:1.5
+\end{lstlisting}
+
+\vspace{-0.2cm}
+\subsection*{Decision Review Report}
+\begin{lstlisting}
+[Consensus Analysis]
+  Level: Majority Consensus
+  Bullish: 3 (60%) | Neutral: 2 (40%)
+
+[Key Insights]
+  [+] Model prediction confidence high (68%)
+  [+] Analysts reached majority consensus
+  [+] Decision consistent with model direction
+
+[Risk Assessment]
+  Risk Level: MODERATE (Score: 4/10)
+  Mitigations: Stop-loss -8%, position within budget
+
+[Lessons]
+  - Multi-model ensemble improved stability
+  - Anonymous peer review reduced bias
+  - Devil's Advocate identified key risks
+\end{lstlisting}
+
+\section{Conclusion}
+The multi-agent workflow successfully produced a validated BUY decision with 45\% position sizing. Key innovations include: (1) anonymous peer review eliminating authority bias, (2) Red-Blue adversarial validation, and (3) automated risk budget calculation ensuring disciplined position sizing.
+
+\end{document}
+

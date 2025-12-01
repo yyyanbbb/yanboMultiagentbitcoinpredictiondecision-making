@@ -1,0 +1,29 @@
+# Intelligent Investment Decision System Dependencies
+
+# API Client
+openai>=1.0.0
+
+# Environment Variable Management
+python-dotenv>=1.0.0
+
+# Terminal Color Output
+colorama>=0.4.6
+
+# Data Processing
+numpy>=1.21.0
+pandas>=1.3.0
+
+# Visualization (optional, for chart generation)
+matplotlib>=3.4.0
+seaborn>=0.11.0
+
+# Statistical Analysis (for ARIMA and other models)
+scipy>=1.7.0
+statsmodels>=0.13.0
+
+# GUI Dependencies (tkinter is built-in with Python)
+# No additional packages required for the GUI
+
+# Prophet Model (optional)
+# prophet>=1.1.0
+

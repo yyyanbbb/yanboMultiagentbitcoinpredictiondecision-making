@@ -1,0 +1,12 @@
+customtkinter
+pillow
+pandas
+matplotlib
+numpy
+scikit-learn
+statsmodels
+prophet
+colorama
+python-dotenv
+openai
+

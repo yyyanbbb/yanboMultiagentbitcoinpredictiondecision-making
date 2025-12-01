@@ -1,0 +1,27 @@
+[
+  {
+    "decision_id": "20251128_235736",
+    "date": "2025-11-28 23:57",
+    "experience": "建议buy，信心7/10"
+  },
+  {
+    "decision_id": "20251129_111330",
+    "date": "2025-11-29 11:13",
+    "experience": "建议hold，信心6/10"
+  },
+  {
+    "decision_id": "20251130_194658",
+    "date": "2025-11-30 19:46",
+    "experience": "recommendationsell，confidence5/10"
+  },
+  {
+    "decision_id": "20251130_195206",
+    "date": "2025-11-30 19:52",
+    "experience": "recommendationstrong_sell，confidence5/10"
+  },
+  {
+    "decision_id": "20251130_212332",
+    "date": "2025-11-30 21:23",
+    "experience": "recommendationstrong_sell，confidence5/10"
+  }
+]
