@@ -214,7 +214,7 @@ bitcoinprediction_decision-making/
 ├── core_prediction_models.py    # Core prediction models (v3.0) ★
 │   ├── LinearRegressionModel    # Linear regression model (Elastic Net)
 │   ├── ARIMAModel               # ARIMA time series model
-│   ├── SeasonalModel            # Seasonal model (Prophet-like)
+│   ├── SeasonalModel           # Seasonal model (Prophet-like)
 │   └── EnsemblePredictorForAnalysts  # Ensemble predictor
 ├── anonymous_peer_review.py     # Anonymous Peer Review system (v3.1 new) ★★
 │   ├── AnonymousPeerReviewSystem# Main peer review orchestrator
